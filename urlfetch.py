@@ -567,6 +567,12 @@ def request(url, method="GET", params=None, data=None, headers={}, timeout=None,
             raise UrlfetchException('Unknown Connection Type: %s' % conn_type)
         return conn
 
+    def pre_request(conn, method, url, data, headers):
+        pass
+
+    def make_request(conn, method, url, data, headers):
+        pass
+    
     via_proxy = False
 
     method = method.upper()
@@ -601,30 +607,6 @@ def request(url, method="GET", params=None, data=None, headers={}, timeout=None,
         'Host': parsed_url['host'],
     }
 
-    # Proxy support
-    scheme = parsed_url['scheme']
-    if proxies is None and trust_env:
-        proxies = PROXIES 
-
-    proxy = proxies.get(scheme)
-    if proxy and parsed_url['host'] not in PROXY_IGNORE_HOSTS:
-        via_proxy = True
-        if '://' not in proxy:
-            proxy = '%s://%s' % (scheme, proxy)
-        parsed_proxy = parse_url(proxy)
-        # Proxy-Authorization
-        if parsed_proxy['username'] and parsed_proxy['password']:
-            proxyauth = '%s:%s' % (parsed_proxy['username'], 
-                                   parsed_proxy['password'])
-            proxyauth = base64.b64encode(proxyauth.encode('utf-8'))
-            reqheaders['Proxy-Authorization'] = 'Basic ' + \
-                                                proxyauth.decode('utf-8')
-        h = make_connection(scheme, parsed_proxy['host'], parsed_proxy['port'],
-                            timeout)
-    else:
-        h = make_connection(scheme,  parsed_url['host'], parsed_url['port'], 
-                            timeout)
-
     if not auth and parsed_url['username'] and parsed_url['password']:
         auth = (parsed_url['username'], parsed_url['password'])
     if auth:
@@ -648,7 +630,34 @@ def request(url, method="GET", params=None, data=None, headers={}, timeout=None,
     for k, v in headers.items():
         reqheaders[k.title()] = v
 
+    # Proxy support
+    scheme = parsed_url['scheme']
+    if proxies is None and trust_env:
+        proxies = PROXIES 
+
+    proxy = proxies.get(scheme)
+    if proxy and parsed_url['host'] not in PROXY_IGNORE_HOSTS:
+        via_proxy = True
+        if '://' not in proxy:
+            proxy = '%s://%s' % (scheme, proxy)
+        parsed_proxy = parse_url(proxy)
+        # Proxy-Authorization
+        if parsed_proxy['username'] and parsed_proxy['password']:
+            proxyauth = '%s:%s' % (parsed_proxy['username'], 
+                                   parsed_proxy['password'])
+            proxyauth = base64.b64encode(proxyauth.encode('utf-8'))
+            reqheaders['Proxy-Authorization'] = 'Basic ' + \
+                                                proxyauth.decode('utf-8')
+        h = make_connection(scheme, parsed_proxy['host'], parsed_proxy['port'],
+                            timeout)
+    else:
+        h = make_connection(scheme, parsed_url['host'], parsed_url['port'],
+                            timeout)
+
     start_time = time.time()
+    h.connect()
+    connect_time = time.time()
+    
     if via_proxy:
         h.request(method, url, data, reqheaders)
     else:
@@ -660,6 +669,8 @@ def request(url, method="GET", params=None, data=None, headers={}, timeout=None,
     response = Response.from_httplib(_response, reqheaders=reqheaders,
                                      connection=h, length_limit=length_limit,
                                      history=history, url=url,
+                                     start_time=start_time,
+                                     connect_time=connect_time,
                                      total_time=total_time)
 
     while (response.status in (301, 302, 303, 307) and

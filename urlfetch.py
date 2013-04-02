@@ -134,12 +134,19 @@ class Response(object):
 
         #: total time
         self.total_time = kwargs.pop('total_time', None)
+        #: start time
+        self.start_time = kwargs.pop('start_time', None)
+        #: connect time
+        self.connect_time = kwargs.pop('connect_time', None)
+        #: pretransfer time
+        self.pretransfer_time = kwargs.pop('pretransfer_time', None)
+        #: starttransfer time
+        self.starttransfer_time = kwargs.pop('starttransfer_time', None)
 
         self.getheader = r.getheader
         self.getheaders = r.getheaders
         self.__CONTENT_DECODERS = {'gzip': decode_gzip,
                                    'deflate': decode_deflate}
-
 
         for k in kwargs:
             setattr(self, k, kwargs[k])
@@ -155,7 +162,6 @@ class Response(object):
             self.close()
             raise UrlfetchException("Content length is more than %d bytes"
                                     % self.length_limit)
-
 
     def read(self, chunk_size=8192):
         ''' read content (for streaming and large files)
@@ -567,12 +573,25 @@ def request(url, method="GET", params=None, data=None, headers={}, timeout=None,
             raise UrlfetchException('Unknown Connection Type: %s' % conn_type)
         return conn
 
-    def pre_request(conn, method, url, data, headers):
-        pass
+    def pre_request(conn, method, url, body, headers):
+        # Honor explicitly requested Host: and Accept-Encoding: headers.
+        header_names = dict.fromkeys([k.lower() for k in headers])
+        skips = {}
+        if 'host' in header_names:
+            skips['skip_host'] = 1
+        if 'accept-encoding' in header_names:
+            skips['skip_accept_encoding'] = 1
+        conn.putrequest(method, url, **skips)
+        if body and ('content-length' not in header_names):
+            conn._set_content_length(body)
+        for hdr, value in headers.items():
+            conn.putheader(hdr, value)
 
-    def make_request(conn, method, url, data, headers):
-        pass
-    
+    def make_request(conn, body):
+        if isinstance(body, unicode):
+            body = b(body)
+        conn.endheaders(body)
+
     via_proxy = False
 
     method = method.upper()
@@ -657,21 +676,26 @@ def request(url, method="GET", params=None, data=None, headers={}, timeout=None,
     start_time = time.time()
     h.connect()
     connect_time = time.time()
-    
     if via_proxy:
-        h.request(method, url, data, reqheaders)
+        pre_request(h, method, url, data, reqheaders)
     else:
-        h.request(method, parsed_url['uri'], data, reqheaders)
+        pre_request(h, method, parsed_url['uri'], data, reqheaders)
+    pretransfer_time = time.time()
+    make_request(h, data)
     _response = h.getresponse()
-    end_time = time.time()
-    total_time = end_time - start_time
+    total_time = time.time()
     history = []
-    response = Response.from_httplib(_response, reqheaders=reqheaders,
-                                     connection=h, length_limit=length_limit,
-                                     history=history, url=url,
-                                     start_time=start_time,
-                                     connect_time=connect_time,
-                                     total_time=total_time)
+    response = Response.from_httplib(
+        _response,
+        reqheaders=reqheaders,
+        connection=h,
+        length_limit=length_limit,
+        history=history,
+        url=url,
+        start_time=start_time,
+        connect_time=connect_time-start_time,
+        pretransfer_time=pretransfer_time-connect_time,
+        total_time=total_time-start_time)
 
     while (response.status in (301, 302, 303, 307) and
            'location' in response.headers and max_redirects):
@@ -715,15 +739,27 @@ def request(url, method="GET", params=None, data=None, headers={}, timeout=None,
                                 timeout)
 
         start_time = time.time()
+        h.connect()
+        connect_time = time.time()
         if via_proxy:
-            h.request(method, url, None, reqheaders)
+            pre_request(h, method, url, data, reqheaders)
         else:
-            h.request(method, parsed_url['uri'], None, reqheaders)
+            pre_request(h, method, parsed_url['uri'], data, reqheaders)
+        pretransfer_time = time.time()
+        make_request(h, data)
         _response = h.getresponse()
-        end_time = time.time()
-        response = Response.from_httplib(_response, reqheaders=reqheaders,
-                                     connection=h, length_limit=length_limit,
-                                     history=history, url=url)
+        total_time = time.time()
+        response = Response.from_httplib(
+            _response,
+            reqheaders=reqheaders,
+            connection=h,
+            length_limit=length_limit,
+            history=history,
+            url=url,
+            start_time=start_time,
+            connect_time=connect_time-start_time,
+            pretransfer_time=pretransfer_time-connect_time,
+            total_time=total_time-start_time)
 
     return response
 

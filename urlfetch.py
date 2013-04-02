@@ -140,7 +140,7 @@ class Response(object):
         self.connect_time = kwargs.pop('connect_time', None)
         #: pretransfer time
         self.pretransfer_time = kwargs.pop('pretransfer_time', None)
-        #: starttransfer time
+        #: starttransfer time, alias of :attr:`pretransfer_time`.
         self.starttransfer_time = kwargs.pop('starttransfer_time', None)
 
         self.getheader = r.getheader

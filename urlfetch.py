@@ -766,10 +766,7 @@ def parse_url(url):
     Including scheme, netloc, path, params, query, fragment, uri, username,
     password, host, port and http_host
     """
-    try:
-        url = unicode(url)
-    except UnicodeDecodeError:
-        pass
+    url = mb_code(url, errors='strict')
 
     if py3k:
         make_utf8 = lambda x: x

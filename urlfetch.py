@@ -1018,7 +1018,7 @@ BOUNDARY_PREFIX = None
 UAFILENAME = 'urlfetch.useragents.list'
 for i in set((os.path.join(sys.prefix, UAFILENAME),
               os.path.join(sys.prefix, 'local', UAFILENAME),
-              os.path.join(os.path.dirname(os.path.abspath(__file__)), UAFILENAME)):
+              os.path.join(os.path.dirname(os.path.abspath(__file__)), UAFILENAME))):
     if os.path.isfile(i):
         UAFILE = i
         break
